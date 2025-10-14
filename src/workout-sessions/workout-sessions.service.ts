@@ -7,6 +7,7 @@ import { SessionSet } from './entities/session-set.entity';
 import { WorkoutTemplatesService } from '../workout-templates/workout-templates.service';
 import { StartWorkoutDto } from './dto/start-workout.dto';
 import { CompleteSetDto } from './dto/complete-set.dto';
+import { AddSetDto } from './dto/add-set.dto';
 
 @Injectable()
 export class WorkoutSessionsService {
@@ -20,63 +21,54 @@ export class WorkoutSessionsService {
     private workoutTemplatesService: WorkoutTemplatesService,
   ) {}
 
-  // Clock In - Započni trening
- async startWorkout(userId: string, startDto: StartWorkoutDto): Promise<WorkoutSession> {
-  // Proveri da li korisnik već ima aktivan trening
-  const activeSession = await this.sessionsRepository.findOne({
-    where: { userId, isWorkoutFinished: false },
-  });
-
-  if (activeSession) {
-    throw new BadRequestException('Već imate aktivan trening. Završite ga pre nego što započnete novi.');
-  }
-
-  // Preuzmi template
-  const template = await this.workoutTemplatesService.findOne(
-    startDto.workoutTemplateId,
-    userId,
-  );
-
-  // Kreiraj workout session
-  const session = this.sessionsRepository.create({
-    userId,
-    workoutTemplateId: template.id,
-    clockIn: new Date(),
-    isWorkoutFinished: false,
-  });
-
-  // Kreiraj vežbe koristeći repository.create() za svaku nested relaciju
-  session.exercises = template.exercises.map((templateExercise) => {
-    const exercise = this.sessionExercisesRepository.create({
-      exerciseId: templateExercise.exerciseId,
-      orderIndex: templateExercise.orderIndex,
-      notes: templateExercise.notes,
-      status: ExerciseStatus.NOT_STARTED,
+  async startWorkout(userId: string, startDto: StartWorkoutDto): Promise<WorkoutSession> {
+    const activeSession = await this.sessionsRepository.findOne({
+      where: { userId, isWorkoutFinished: false },
     });
 
-    // Kreiraj setove koristeći repository.create()
-    exercise.sets = templateExercise.sets.map((templateSet) =>
-      this.sessionSetsRepository.create({
-        setNumber: templateSet.setNumber,
-        targetWeight: templateSet.targetWeight,
-        targetReps: templateSet.targetReps,
-        isCompleted: false
-      }),
+    if (activeSession) {
+      throw new BadRequestException('Već imate aktivan trening. Završite ga pre nego što započnete novi.');
+    }
+
+    const template = await this.workoutTemplatesService.findOne(
+      startDto.workoutTemplateId,
+      userId,
     );
 
-    return exercise;
-  });
+    const session = this.sessionsRepository.create({
+      userId,
+      workoutTemplateId: template.id,
+      clockIn: new Date(),
+      isWorkoutFinished: false,
+    });
 
-  // Postavi prvu vežbu kao "in_progress"
-  if (session.exercises.length > 0) {
-    session.exercises[0].status = ExerciseStatus.IN_PROGRESS;
+    session.exercises = template.exercises.map((templateExercise) => {
+      const exercise = this.sessionExercisesRepository.create({
+        exerciseId: templateExercise.exerciseId,
+        orderIndex: templateExercise.orderIndex,
+        notes: templateExercise.notes,
+        status: ExerciseStatus.NOT_STARTED,
+      });
+
+      exercise.sets = templateExercise.sets.map((templateSet) =>
+        this.sessionSetsRepository.create({
+          setNumber: templateSet.setNumber,
+          targetWeight: templateSet.targetWeight,
+          targetReps: templateSet.targetReps,
+          isCompleted: false
+        }),
+      );
+
+      return exercise;
+    });
+
+    if (session.exercises.length > 0) {
+      session.exercises[0].status = ExerciseStatus.IN_PROGRESS;
+    }
+
+    return await this.sessionsRepository.save(session);
   }
 
-  // Sačuvaj sve odjednom zahvaljujući cascade opciji
-  return await this.sessionsRepository.save(session);
-}
-
-  // Unesi broj ponavljanja za set
   async completeSet(
     sessionId: string,
     userId: string,
@@ -101,38 +93,40 @@ export class WorkoutSessionsService {
       throw new BadRequestException('Set ne pripada ovom treningu');
     }
 
-    // Updejtuj set
+    // Update set with actual values
     set.actualReps = completeSetDto.actualReps;
+    set.actualWeight = completeSetDto.actualWeight || set.targetWeight;
     set.isCompleted = true;
     await this.sessionSetsRepository.save(set);
 
-    // Ponovo preuzmi session sa svim relacionim podacima
+    // Refresh session to get updated data
     const updatedSession = await this.findOne(sessionId, userId);
 
-    // Proveri da li su svi setovi trenutne vežbe završeni
-    const currentExercise = updatedSession.exercises.find(
-      (ex) => ex.status === ExerciseStatus.IN_PROGRESS,
+    // Find the exercise that contains this set
+    const exercise = updatedSession.exercises.find(
+      ex => ex.sets.some(s => s.id === set.id)
     );
 
-    if (currentExercise) {
-      const allSetsCompleted = currentExercise.sets.every((s) => s.isCompleted);
+    if (exercise && exercise.status === ExerciseStatus.IN_PROGRESS) {
+      // Check if ALL sets in this exercise are completed
+      const allSetsCompleted = exercise.sets.every(s => s.isCompleted);
 
       if (allSetsCompleted) {
-        // Označi trenutnu vežbu kao završenu
-        currentExercise.status = ExerciseStatus.FINISHED;
-        await this.sessionExercisesRepository.save(currentExercise);
+        // Mark current exercise as finished
+        exercise.status = ExerciseStatus.FINISHED;
+        await this.sessionExercisesRepository.save(exercise);
 
-        // Pronađi sledeću vežbu
+        // Find next NOT_STARTED exercise
         const nextExercise = updatedSession.exercises.find(
-          (ex) => ex.status === ExerciseStatus.NOT_STARTED,
+          ex => ex.status === ExerciseStatus.NOT_STARTED
         );
 
         if (nextExercise) {
-          // Pokreni sledeću vežbu
+          // Start next exercise
           nextExercise.status = ExerciseStatus.IN_PROGRESS;
           await this.sessionExercisesRepository.save(nextExercise);
         } else {
-          // Nema više vežbi, završi trening automatski
+          // No more exercises - finish workout automatically
           return await this.finishWorkout(sessionId, userId);
         }
       }
@@ -141,7 +135,129 @@ export class WorkoutSessionsService {
     return await this.findOne(sessionId, userId);
   }
 
-  // Clock Out - Završi trening
+  // NEW: Add extra set to exercise
+  async addSet(
+    sessionId: string,
+    exerciseId: string,
+    userId: string,
+    weight: number,
+    reps: number,
+  ): Promise<WorkoutSession> {
+    const session = await this.findOne(sessionId, userId);
+
+    if (session.isWorkoutFinished) {
+      throw new BadRequestException('Ovaj trening je već završen');
+    }
+
+    const exercise = await this.sessionExercisesRepository.findOne({
+      where: { id: exerciseId },
+      relations: ['sets'],
+    });
+
+    if (!exercise) {
+      throw new NotFoundException('Vežba nije pronađena');
+    }
+
+    if (exercise.workoutSessionId !== sessionId) {
+      throw new BadRequestException('Vežba ne pripada ovom treningu');
+    }
+
+    const newSetNumber = exercise.sets.length + 1;
+    const newSet = this.sessionSetsRepository.create({
+      sessionExerciseId: exerciseId,
+      setNumber: newSetNumber,
+      targetWeight: weight,
+      targetReps: reps,
+      isCompleted: false,
+    });
+
+    await this.sessionSetsRepository.save(newSet);
+    return await this.findOne(sessionId, userId);
+  }
+
+  // NEW: Skip to next exercise
+  async skipExercise(
+    sessionId: string,
+    exerciseId: string,
+    userId: string,
+  ): Promise<WorkoutSession> {
+    const session = await this.findOne(sessionId, userId);
+
+    if (session.isWorkoutFinished) {
+      throw new BadRequestException('Ovaj trening je već završen');
+    }
+
+    const exercise = await this.sessionExercisesRepository.findOne({
+      where: { id: exerciseId },
+    });
+
+    if (!exercise || exercise.workoutSessionId !== sessionId) {
+      throw new BadRequestException('Vežba nije pronađena ili ne pripada ovom treningu');
+    }
+
+    if (exercise.status !== ExerciseStatus.IN_PROGRESS) {
+      throw new BadRequestException('Vežba nije aktivna');
+    }
+
+    // Set current exercise as NOT_STARTED (skipped)
+    exercise.status = ExerciseStatus.NOT_STARTED;
+    await this.sessionExercisesRepository.save(exercise);
+
+    // Find next NOT_STARTED exercise
+    const updatedSession = await this.findOne(sessionId, userId);
+    const nextExercise = updatedSession.exercises.find(
+      (ex) => ex.status === ExerciseStatus.NOT_STARTED && ex.id !== exerciseId,
+    );
+
+    if (nextExercise) {
+      nextExercise.status = ExerciseStatus.IN_PROGRESS;
+      await this.sessionExercisesRepository.save(nextExercise);
+    }
+
+    return await this.findOne(sessionId, userId);
+  }
+
+  // NEW: Resume skipped exercise
+  async resumeExercise(
+    sessionId: string,
+    exerciseId: string,
+    userId: string,
+  ): Promise<WorkoutSession> {
+    const session = await this.findOne(sessionId, userId);
+
+    if (session.isWorkoutFinished) {
+      throw new BadRequestException('Ovaj trening je već završen');
+    }
+
+    const exercise = await this.sessionExercisesRepository.findOne({
+      where: { id: exerciseId },
+    });
+
+    if (!exercise || exercise.workoutSessionId !== sessionId) {
+      throw new BadRequestException('Vežba nije pronađena ili ne pripada ovom treningu');
+    }
+
+    if (exercise.status === ExerciseStatus.FINISHED) {
+      throw new BadRequestException('Ova vežba je već završena');
+    }
+
+    // Set any current IN_PROGRESS exercise back to NOT_STARTED
+    const currentExercise = session.exercises.find(
+      (ex) => ex.status === ExerciseStatus.IN_PROGRESS,
+    );
+
+    if (currentExercise) {
+      currentExercise.status = ExerciseStatus.NOT_STARTED;
+      await this.sessionExercisesRepository.save(currentExercise);
+    }
+
+    // Set selected exercise as IN_PROGRESS
+    exercise.status = ExerciseStatus.IN_PROGRESS;
+    await this.sessionExercisesRepository.save(exercise);
+
+    return await this.findOne(sessionId, userId);
+  }
+
   async finishWorkout(sessionId: string, userId: string): Promise<WorkoutSession> {
     const session = await this.findOne(sessionId, userId);
 
@@ -157,7 +273,6 @@ export class WorkoutSessionsService {
     session.durationMinutes = durationMinutes;
     session.isWorkoutFinished = true;
 
-    // Označi sve preostale vežbe kao finished
     for (const exercise of session.exercises) {
       if (exercise.status !== ExerciseStatus.FINISHED) {
         exercise.status = ExerciseStatus.FINISHED;
@@ -168,7 +283,6 @@ export class WorkoutSessionsService {
     return await this.sessionsRepository.save(session);
   }
 
-  // Preuzmi sve treninge korisnika
   async findAll(userId: string): Promise<WorkoutSession[]> {
     return await this.sessionsRepository.find({
       where: { userId },
@@ -180,7 +294,6 @@ export class WorkoutSessionsService {
     });
   }
 
-  // Preuzmi aktivan trening
   async getActiveWorkout(userId: string): Promise<WorkoutSession | null> {
     return await this.sessionsRepository.findOne({
       where: { userId, isWorkoutFinished: false },
@@ -191,7 +304,6 @@ export class WorkoutSessionsService {
     });
   }
 
-  // Preuzmi jedan trening
   async findOne(id: string, userId: string): Promise<WorkoutSession> {
     const session = await this.sessionsRepository.findOne({
       where: { id },
@@ -212,7 +324,6 @@ export class WorkoutSessionsService {
     return session;
   }
 
-  // Obriši trening
   async remove(id: string, userId: string): Promise<void> {
     const session = await this.findOne(id, userId);
     await this.sessionsRepository.remove(session);

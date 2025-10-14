@@ -22,17 +22,27 @@ export class WorkoutTemplatesService {
     userId: string,
     createDto: CreateWorkoutTemplateDto,
   ): Promise<WorkoutTemplate> {
+    // Create template exercises with proper orderIndex
+    const exercises = createDto.exercises.map((exercise, index) => 
+      this.templateExercisesRepository.create({
+        exerciseId: exercise.exerciseId,
+        orderIndex: index, // Explicitly set orderIndex
+        notes: exercise.notes,
+        sets: exercise.sets.map((set, setIndex) =>
+          this.templateSetsRepository.create({
+            setNumber: setIndex + 1,
+            targetWeight: set.targetWeight,
+            targetReps: set.targetReps,
+          }),
+        ),
+      }),
+    );
+
     const template = this.templatesRepository.create({
-      ...createDto,
+      name: createDto.name,
+      description: createDto.description,
       userId,
-      exercises: createDto.exercises.map((exercise, index) => ({
-        ...exercise,
-        orderIndex: index,
-        sets: exercise.sets.map((set, setIndex) => ({
-          ...set,
-          setNumber: setIndex + 1,
-        })),
-      })),
+      exercises,
     });
 
     return await this.templatesRepository.save(template);
@@ -53,6 +63,9 @@ export class WorkoutTemplatesService {
     const template = await this.templatesRepository.findOne({
       where: { id },
       relations: ['exercises', 'exercises.exercise', 'exercises.sets'],
+      order: {
+        exercises: { orderIndex: 'ASC', sets: { setNumber: 'ASC' } },
+      },
     });
 
     if (!template) {
@@ -73,27 +86,39 @@ export class WorkoutTemplatesService {
   ): Promise<WorkoutTemplate> {
     const template = await this.findOne(id, userId);
 
-    // Obriši stare vežbe ako postoje nove
+    // Delete old exercises if new ones are provided
     if (updateDto.exercises) {
       await this.templateExercisesRepository.delete({
         workoutTemplateId: id,
       });
 
-      template.exercises = updateDto.exercises.map((exercise, index) => ({
-        ...exercise,
-        orderIndex: index,
-        workoutTemplateId: id,
-        sets: exercise.sets.map((set, setIndex) => ({
-          ...set,
-          setNumber: setIndex + 1,
-        })),
-      } as TemplateExercise));
+      // Create new exercises with proper orderIndex
+      const exercises = updateDto.exercises.map((exercise, index) =>
+        this.templateExercisesRepository.create({
+          workoutTemplateId: id,
+          exerciseId: exercise.exerciseId,
+          orderIndex: index, // Explicitly set orderIndex
+          notes: exercise.notes,
+          sets: exercise.sets.map((set, setIndex) =>
+            this.templateSetsRepository.create({
+              setNumber: setIndex + 1,
+              targetWeight: set.targetWeight,
+              targetReps: set.targetReps,
+            }),
+          ),
+        }),
+      );
+
+      template.exercises = exercises;
     }
 
-    Object.assign(template, {
-      name: updateDto.name ?? template.name,
-      description: updateDto.description ?? template.description,
-    });
+    // Update name and description
+    if (updateDto.name !== undefined) {
+      template.name = updateDto.name;
+    }
+    if (updateDto.description !== undefined) {
+      template.description = updateDto.description;
+    }
 
     return await this.templatesRepository.save(template);
   }

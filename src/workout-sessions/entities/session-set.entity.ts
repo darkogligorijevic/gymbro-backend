@@ -32,6 +32,9 @@ export class SessionSet {
   @Column()
   targetReps: number; // Planirani broj ponavljanja
 
+  @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true })
+  actualWeight?: number; // Stvarna kilaža (ako je drugačija)
+
   @Column({ type: 'int', nullable: true })
   actualReps?: number; // Stvarno urađeni broj ponavljanja
 

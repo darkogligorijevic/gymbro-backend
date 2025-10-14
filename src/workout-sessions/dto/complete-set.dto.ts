@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsNumber, Min } from 'class-validator';
+import { IsUUID, IsNumber, Min, IsOptional } from 'class-validator';
 
 export class CompleteSetDto {
   @ApiProperty({ 
@@ -16,4 +16,14 @@ export class CompleteSetDto {
   @IsNumber()
   @Min(0)
   actualReps: number;
+
+  @ApiProperty({ 
+    example: 82.5, 
+    description: 'Stvarna kilaža korišćena (opciono, ako je drugačija od planirane)',
+    required: false
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  actualWeight?: number;
 }

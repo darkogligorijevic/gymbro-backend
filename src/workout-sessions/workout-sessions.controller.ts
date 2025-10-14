@@ -13,6 +13,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagg
 import { WorkoutSessionsService } from './workout-sessions.service';
 import { StartWorkoutDto } from './dto/start-workout.dto';
 import { CompleteSetDto } from './dto/complete-set.dto';
+import { AddSetDto } from './dto/add-set.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Workout Sessions')
@@ -36,7 +37,7 @@ export class WorkoutSessionsController {
   @Patch(':id/complete-set')
   @ApiOperation({ 
     summary: 'Završi set', 
-    description: 'Unosi broj ponavljanja za set. Automatski prelazi na sledeći set/vežbu kada se završi.' 
+    description: 'Unosi broj ponavljanja i opciono kilaže za set.' 
   })
   @ApiResponse({ status: 200, description: 'Set uspešno završen' })
   completeSet(
@@ -45,6 +46,54 @@ export class WorkoutSessionsController {
     @Body() completeSetDto: CompleteSetDto,
   ) {
     return this.workoutSessionsService.completeSet(id, req.user.userId, completeSetDto);
+  }
+
+  @Post(':id/add-set')
+  @ApiOperation({ 
+    summary: 'Dodaj dodatni set', 
+    description: 'Dodaje dodatni set vežbi tokom treninga' 
+  })
+  @ApiResponse({ status: 201, description: 'Set uspešno dodat' })
+  addSet(
+    @Param('id') id: string,
+    @Request() req,
+    @Body() addSetDto: AddSetDto,
+  ) {
+    return this.workoutSessionsService.addSet(
+      id,
+      addSetDto.exerciseId,
+      req.user.userId,
+      addSetDto.targetWeight,
+      addSetDto.targetReps,
+    );
+  }
+
+  @Post(':id/skip-exercise/:exerciseId')
+  @ApiOperation({ 
+    summary: 'Preskoči vežbu', 
+    description: 'Privremeno preskoči trenutnu vežbu i pređi na sledeću' 
+  })
+  @ApiResponse({ status: 200, description: 'Vežba preskočena' })
+  skipExercise(
+    @Param('id') id: string,
+    @Param('exerciseId') exerciseId: string,
+    @Request() req,
+  ) {
+    return this.workoutSessionsService.skipExercise(id, exerciseId, req.user.userId);
+  }
+
+  @Post(':id/resume-exercise/:exerciseId')
+  @ApiOperation({ 
+    summary: 'Nastavi preskočenu vežbu', 
+    description: 'Vrati se na preskočenu vežbu' 
+  })
+  @ApiResponse({ status: 200, description: 'Vežba nastavljena' })
+  resumeExercise(
+    @Param('id') id: string,
+    @Param('exerciseId') exerciseId: string,
+    @Request() req,
+  ) {
+    return this.workoutSessionsService.resumeExercise(id, exerciseId, req.user.userId);
   }
 
   @Post(':id/finish')
