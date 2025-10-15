@@ -31,6 +31,9 @@ export class User {
   @Column({ nullable: true })
   lastName: string;
 
+  @Column({ nullable: true })
+  avatarUrl: string;
+
   @OneToMany(() => WorkoutTemplate, (template) => template.user)
   workoutTemplates: WorkoutTemplate[];
 
