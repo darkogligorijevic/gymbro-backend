@@ -24,7 +24,7 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const user = await this.validateUser(loginDto.email, loginDto.password);
     if (!user) {
-      throw new UnauthorizedException('Neispravni kredencijali');
+      throw new UnauthorizedException('Email or password are incorrect');
     }
 
     const payload = { email: user.email, sub: user.id };
