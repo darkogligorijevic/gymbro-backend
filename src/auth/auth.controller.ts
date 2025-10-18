@@ -1,7 +1,7 @@
 import { Controller, Post, Body, UseGuards, Get, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
-//import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
@@ -10,6 +10,17 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Post('login')
+  @Throttle({ short: { limit: 3, ttl: 1000 } }) // 3 pokušaja u sekundi
+  @Throttle({ long: { limit: 5, ttl: 60000 } }) // 5 pokušaja u minuti
+  @ApiOperation({ summary: 'Prijava korisnika' })
+  @ApiResponse({ status: 200, description: 'Uspešna prijava' })
+  @ApiResponse({ status: 401, description: 'Neispravni kredencijali' })
+  @ApiResponse({ status: 429, description: 'Previše pokušaja prijave' })
+  async login(@Body() loginDto: LoginDto) {
+    return this.authService.login(loginDto);
+  }
+
   // @Post('register')
   // @ApiOperation({ summary: 'Registracija novog korisnika' })
   // @ApiResponse({ status: 201, description: 'Korisnik uspešno registrovan' })
@@ -17,14 +28,6 @@ export class AuthController {
   // async register(@Body() registerDto: RegisterDto) {
   //   return this.authService.register(registerDto);
   // }
-
-  @Post('login')
-  @ApiOperation({ summary: 'Prijava korisnika' })
-  @ApiResponse({ status: 200, description: 'Uspešna prijava' })
-  @ApiResponse({ status: 401, description: 'Neispravni kredencijali' })
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
-  }
 
   @UseGuards(JwtAuthGuard)
   @Get('profile')

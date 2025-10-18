@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ExercisesModule } from './exercises/exercises.module';
@@ -12,6 +13,24 @@ import { WorkoutSessionsModule } from './workout-sessions/workout-sessions.modul
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    // Rate Limiting - Brute Force Protection
+    ThrottlerModule.forRoot([
+      {
+        name: 'short',
+        ttl: 1000, // 1 sekunda
+        limit: 10, // 10 zahteva
+      },
+      {
+        name: 'medium',
+        ttl: 10000, // 10 sekundi
+        limit: 50, // 50 zahteva
+      },
+      {
+        name: 'long',
+        ttl: 60000, // 1 minut
+        limit: 100, // 100 zahteva
+      },
+    ]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -22,7 +41,7 @@ import { WorkoutSessionsModule } from './workout-sessions/workout-sessions.modul
         password: configService.get('DB_PASSWORD', ''),
         database: configService.get('DB_DATABASE', 'gym_app'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: configService.get('NODE_ENV') !== 'production', // samo u dev
+        synchronize: configService.get('NODE_ENV') !== 'production',
         logging: configService.get('NODE_ENV') === 'development',
       }),
       inject: [ConfigService],

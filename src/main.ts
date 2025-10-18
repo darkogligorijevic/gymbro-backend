@@ -4,9 +4,24 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import helmet from 'helmet';
+import { ThrottlerExceptionFilter } from './common/filters/throttler-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Helmet - Sigurnosni headeri
+  app.use(helmet({
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: [`'self'`],
+        styleSrc: [`'self'`, `'unsafe-inline'`],
+        scriptSrc: [`'self'`, `'unsafe-inline'`],
+        imgSrc: [`'self'`, 'data:', 'https:'],
+      },
+    },
+  }));
 
   app.enableCors({
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -20,6 +35,9 @@ async function bootstrap() {
     prefix: '/uploads/',
   });
 
+  // Global Exception Filter za Rate Limiting
+  app.useGlobalFilters(new ThrottlerExceptionFilter());
+
   // Validation
   app.useGlobalPipes(
     new ValidationPipe({
@@ -32,7 +50,7 @@ async function bootstrap() {
   // Swagger
   const config = new DocumentBuilder()
     .setTitle('Gym App API')
-    .setDescription('API za gym aplikaciju')
+    .setDescription('API za gym aplikaciju sa rate limiting zaštitom')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
@@ -41,5 +59,7 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3001);
   console.log(`🚀 Application is running on: http://localhost:${process.env.PORT ?? 3001}`);
+  console.log(`🛡️  Security: Helmet + Rate Limiting enabled`);
+  console.log(`⚠️  Rate limits: 3/sec, 5/min for login, 10/sec, 50/10sec, 100/min for other routes`);
 }
 bootstrap();
