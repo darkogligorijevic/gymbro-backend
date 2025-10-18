@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsEnum, IsOptional, IsUrl } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsUrl, IsArray } from 'class-validator';
 import { MuscleGroup } from '../entities/exercise.entity';
 
 export class CreateExerciseDto {
@@ -15,6 +15,16 @@ export class CreateExerciseDto {
   @ApiProperty({ enum: MuscleGroup, example: MuscleGroup.CHEST })
   @IsEnum(MuscleGroup)
   muscleGroup: MuscleGroup;
+
+  @ApiProperty({ 
+    example: ['Anterior Deltoids', 'Triceps', 'Serratus Anterior'], 
+    required: false,
+    type: [String]
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  targetMuscles?: string[];
 
   @ApiProperty({ example: 'https://youtube.com/watch?v=...', required: false })
   @IsOptional()

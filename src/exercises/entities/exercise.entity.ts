@@ -36,6 +36,9 @@ export class Exercise {
   })
   muscleGroup: MuscleGroup;
 
+  @Column({ type: 'simple-array', nullable: true })
+  targetMuscles: string[];
+
   @Column({ nullable: true })
   videoUrl: string;
 
