@@ -13,12 +13,14 @@ async function bootstrap() {
   // Helmet - Sigurnosni headeri
   app.use(helmet({
     crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // Dozvoli cross-origin za slike
     contentSecurityPolicy: {
       directives: {
         defaultSrc: [`'self'`],
         styleSrc: [`'self'`, `'unsafe-inline'`],
         scriptSrc: [`'self'`, `'unsafe-inline'`],
-        imgSrc: [`'self'`, 'data:', 'https:'],
+        imgSrc: [`'self'`, 'data:', 'blob:', 'http:', 'https:'], // Prošireno za slike
+        connectSrc: [`'self'`, 'http://localhost:3001', 'http://localhost:3000'],
       },
     },
   }));
