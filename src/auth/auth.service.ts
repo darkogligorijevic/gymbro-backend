@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
-//import { RegisterDto } from './dto/register.dto';
+import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
 @Injectable()
@@ -34,20 +34,20 @@ export class AuthService {
     };
   }
 
-  // async register(registerDto: RegisterDto) {
-  //   const hashedPassword = await bcrypt.hash(registerDto.password, 10);
+  async register(registerDto: RegisterDto) {
+    const hashedPassword = await bcrypt.hash(registerDto.password, 10);
     
-  //   const user = await this.usersService.create({
-  //     ...registerDto,
-  //     password: hashedPassword,
-  //   });
+    const user = await this.usersService.create({
+      ...registerDto,
+      password: hashedPassword,
+    });
 
-  //   const { password, ...result } = user;
+    const { password, ...result } = user;
     
-  //   const payload = { email: result.email, sub: result.id };
-  //   return {
-  //     access_token: this.jwtService.sign(payload),
-  //     user: result,
-  //   };
-  // }
+    const payload = { email: result.email, sub: result.id };
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: result,
+    };
+  }
 }

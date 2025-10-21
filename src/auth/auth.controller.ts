@@ -4,6 +4,7 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -21,13 +22,13 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
-  // @Post('register')
-  // @ApiOperation({ summary: 'Registracija novog korisnika' })
-  // @ApiResponse({ status: 201, description: 'Korisnik uspešno registrovan' })
-  // @ApiResponse({ status: 400, description: 'Neispravni podaci' })
-  // async register(@Body() registerDto: RegisterDto) {
-  //   return this.authService.register(registerDto);
-  // }
+  @Post('register')
+  @ApiOperation({ summary: 'Registracija novog korisnika' })
+  @ApiResponse({ status: 201, description: 'Korisnik uspešno registrovan' })
+  @ApiResponse({ status: 400, description: 'Neispravni podaci' })
+  async register(@Body() registerDto: RegisterDto) {
+    return this.authService.register(registerDto);
+  }
 
   @UseGuards(JwtAuthGuard)
   @Get('profile')
